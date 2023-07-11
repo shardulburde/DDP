@@ -1,0 +1,354 @@
+def S1(x,a1):
+
+  if x>=a1:
+    value=1
+
+  else:
+    value=-1
+
+  return value
+
+def S2(y,a2):
+
+  if y>=a2:
+    value=1
+
+  else:
+    value=-1
+
+  return value
+
+import numpy as np
+
+def H_x(n,j,theta_ij):
+  matrix=np.zeros([n,n+1])
+
+  for i in range(n):
+    matrix[i,0]=float(theta_ij[i,j][0])
+
+  return matrix
+
+def H_y(n,j,theta_ij):
+  matrix=np.zeros([n,n+1])
+
+  for i in range(n):
+    matrix[i,0]=float(theta_ij[i,j][1])
+
+  return matrix
+
+
+
+def Hx(H1x,n,j,theta_ij):
+  matrix=np.zeros([n,n+1])
+  matrix=H1x+H_x(n,j,theta_ij)
+  return matrix
+
+def Hy(H1y,n,j,theta_ij):
+  matrix=np.zeros([n,n+1])
+  matrix=H1y+H_y(n,j,theta_ij)
+  return matrix
+
+
+def y(n,j,theta_ij,D):
+  matrix=np.zeros([n,1])
+
+  for i in range(n):
+    a_i=np.array([D[i][1],D[i][2]]).reshape(-1, 1)
+    matrix[i,0]=theta_ij[i,j][0,0]*a_i[0,0] + theta_ij[i,j][1,0]*a_i[1,0]
+
+  return matrix
+
+import cvxpy as cp
+import numpy as np
+
+def region_solve(D,j,u_cap,sigma1,sigma2,gamma1,gamma2,pi1,pi2,upp,l,theta_ij,H1x,H1y,H2x,H2y,H3x,H3y,H4x,H4y,jx,jy):
+  import cvxpy as cp
+
+  #Polyhedral support
+  n=D.shape[0]
+
+  #Declaring variables
+  ux=cp.Variable((n+1,1))
+  uy=cp.Variable((n+1,1))
+  r=cp.Variable()
+  Q=cp.Variable((n,n),symmetric=True)
+  P=cp.Variable((n,n),symmetric=True)
+  p=cp.Variable((n,1))
+  s=cp.Variable()
+  T1=cp.Variable((2*n,1))
+  T2=cp.Variable((2*n,1))
+  T3=cp.Variable((2*n,1))
+  T4=cp.Variable((2*n,1))
+  V1=cp.Variable((n+1,n+1),symmetric=True)
+  V2=cp.Variable((n+1,n+1),symmetric=True)
+  V3=cp.Variable((n+1,n+1),symmetric=True)
+  V4=cp.Variable((n+1,n+1),symmetric=True)
+  V5=cp.Variable((n+1,n+1),symmetric=True)
+
+
+  #A transpose matrix
+  At=np.zeros([n,2*n])
+
+  for i in range(n):
+    At[i,i]=1
+    At[i,n+i]=-1
+
+  #b transpose matrix
+  bt=np.zeros([1,2*n])
+
+  for i in range(n):
+    bt[0,i]=pi2*upp
+    bt[0,i+n]=-pi1*l
+
+
+  #Block matrix SDP constraint 1
+  Y=y(n,j,theta_ij,D)
+
+
+  M1= p+Q@u_cap + 0.5*(Hx(H1x,n,j,theta_ij)@ux + Hy(H1y,n,j,theta_ij)@uy + Y + At@T1)
+  M2= p+Q@u_cap + 0.5*(Hx(H2x,n,j,theta_ij)@ux + Hy(H2y,n,j,theta_ij)@uy + Y + At@T2)
+  M3= p+Q@u_cap + 0.5*(Hx(H3x,n,j,theta_ij)@ux + Hy(H3y,n,j,theta_ij)@uy + Y + At@T3)
+  M4= p+Q@u_cap + 0.5*(Hx(H4x,n,j,theta_ij)@ux + Hy(H4y,n,j,theta_ij)@uy + Y + At@T4)
+
+
+  N1=(r*np.eye(1)-bt@T1)
+  N2=(r*np.eye(1)-bt@T2)
+  N3=(r*np.eye(1)-bt@T3)
+  N4=(r*np.eye(1)-bt@T4)
+
+
+
+
+  V1=cp.bmat([[Q,M1],[M1.T,N1]])
+  V2=cp.bmat([[Q,M2],[M2.T,N2]])
+  V3=cp.bmat([[Q,M3],[M3.T,N3]])
+  V4=cp.bmat([[Q,M4],[M4.T,N4]])
+
+  constraints=[]
+
+  constraints+=[V1>>0]
+  constraints+=[V2>>0]
+  constraints+=[V3>>0]
+  constraints+=[V4>>0]
+
+  constraints+=[cp.lambda_min(V1)>=0]
+  constraints+=[cp.lambda_min(V2)>=0]
+  constraints+=[cp.lambda_min(V3)>=0]
+  constraints+=[cp.lambda_min(V3)>=0]
+
+  constraints+=[Q>>0]
+
+
+  #Block matrix SDp constraint 2
+  S=s*np.eye(1)
+  V5=cp.bmat([[P,p],[p.T,s*np.eye(1)]])
+  constraints+=[V5>>0]
+
+  constraints+=[cp.lambda_min(V5)>=0]
+
+  #Tl SDP constraint
+  constraints+=[T1>=0]
+  constraints+=[T2>=0]
+  constraints+=[T3>=0]
+  constraints+=[T4>=0]
+
+  #u belongs to X crozz K
+
+  for i in range(n):
+    constraints+= [
+        cp.abs(ux[i+1,0])<=1,
+        cp.abs(uy[i+1,0]) <=1
+
+    ]
+
+
+
+  #x belongs to Dj region
+
+  constraints+=[jx[j,1]-ux[0,0]>=0]
+  constraints+=[ux[0,0]-jx[j,0]>=0]
+
+  constraints+=[uy[0,0]<=jy[j,1]]
+  constraints+=[uy[0,0]>=jy[j,0]]
+
+
+
+  objective=cp.Minimize(gamma2*cp.trace(sigma2@(Q.T)) - (u_cap.T)@(Q@u_cap) + r + cp.trace(sigma1@(P.T))-2*((u_cap.T)@p) + gamma1*s)
+
+  X=cp.Minimize((u_cap.T)@(Q@u_cap) +gamma1*s)
+  soln=cp.Problem(objective,constraints)
+
+  soln.solve()
+  return ux.value[0,0],uy.value[0,0]
+
+from numpy import linalg as LA
+from scipy.linalg import fractional_matrix_power
+import math
+
+def dwrp(D,alpha,phi,pi1,pi2):
+
+  #Creating u_cap vector
+
+  import numpy as np
+  import cvxpy as cp
+
+  n=D.shape[0]
+  m=D.shape[1]-3
+  u_cap=np.zeros([n,1])
+
+
+
+  for i in range(n):
+    sum=0
+    for j in range(m):
+      sum=sum+D[i,j+2]
+
+    u_cap[i,0]=float(sum/m)
+
+
+
+  #Creating Sigma_cap matrix
+
+  sigma=np.empty([n,n],dtype=float)
+  sum=np.empty([n,n],dtype=float)
+  term=np.empty([n,n],dtype=float)
+  K=np.empty([n,1],dtype=float)
+
+  for j in range(m):
+    abc=np.array(list(D[:, j+2]), dtype=float)
+    K=np.add(abc.reshape(-1,1),-u_cap)
+    term=np.matmul(K,K.T)
+    sum=np.add(sum,term)
+
+  sigma=(1/m)*sum
+
+  #I nXn matrix
+  I=np.identity(n)
+
+  #Sigma 1
+  sigma1=np.zeros([n,n],dtype=float)
+  sigma1=np.add(sigma,alpha*I)
+
+  Ds=np.delete(D,[0,1,2],1)
+  l=Ds.min()
+  upp=Ds.max()
+  A=np.identity(n)
+  b=upp*pi2*(np.ones(n)).reshape(-1,1)
+
+  term1=fractional_matrix_power(sigma1, -0.5)
+  vector=np.matmul(term1,b-u_cap)
+  R_cap=LA.norm(vector.T,2)
+
+
+  Ml=5000000000
+  num_eeta=1+math.sqrt(np.log(math.sqrt(4/phi)))
+  denom_eeta=math.sqrt(Ml)
+  eeta=num_eeta/denom_eeta
+
+
+  r_num=((4*Ml-3)**2)*np.log(math.sqrt(2/phi))
+  r_denom=Ml**3
+  rho=math.sqrt((1/Ml)+math.sqrt(r_num/r_denom))
+
+  denom=math.sqrt( ((1-rho)**2) - (R_cap*R_cap*eeta) )
+  R_bar= R_cap/denom
+
+  theta_bar=R_bar*R_bar*eeta
+
+  beta_bar=R_bar*R_bar*rho*rho
+
+  gamma1=beta_bar/(1-theta_bar-beta_bar)
+
+  gamma2=(1+beta_bar)/(1-theta_bar-beta_bar)
+
+  sigma2=np.empty([n,n])
+  sigma2=np.add(sigma,(1-1/gamma2)*alpha*I)
+
+
+
+  #Finding c
+  D_abs=np.absolute(np.delete(D,0,1))
+  C=np.max(D_abs,axis=0)
+  c=max(C[0],C[1])
+
+  #H matrices
+  H1x=np.zeros([n,n+1])
+  H2x=np.zeros([n,n+1])
+  H3x=np.zeros([n,n+1])
+  H4x=np.zeros([n,n+1])
+
+  H1y=np.zeros([n,n+1])
+  H2y=np.zeros([n,n+1])
+  H3y=np.zeros([n,n+1])
+  H4y=np.zeros([n,n+1])
+
+
+  for i in range(n):
+    x=D[i][1]
+    y=D[i][2]
+
+    H1x[i,i+1]=x+c
+    H2x[i,i+1]=x-c
+    H3x[i,i+1]=x+c
+    H4x[i,i+1]=x-c
+
+    H1y[i,i+1]=y+c
+    H2y[i,i+1]=y+c
+    H3y[i,i+1]=y-c
+    H4y[i,i+1]=y-c
+
+  Xx=np.unique(D[:,1])
+  Xy=np.unique(D[:,2])
+
+  Xx_n=Xx.size
+  Xy_n=Xy.size
+
+
+
+  #Number of regions
+  J=(Xx_n-1)*(Xy_n-1)
+  jx=np.zeros([J,2])
+  jy=np.zeros([J,2])
+  Dx=[]
+  Dy=[]
+
+  count=0
+
+  for i in range(Xx_n-1):
+    for j in range(Xy_n-1):
+      x_avg=(Xx[i]+Xx[i+1])/2
+      y_avg=(Xy[j]+Xy[j+1])/2
+      Dx.append(x_avg)
+      Dy.append(y_avg)
+      jx[count,0]=Xx[i]
+      jx[count,1]=Xx[i+1]
+      jy[count,0]=Xy[j]
+      jy[count,1]=Xy[j+1]
+      count=count+1
+
+  theta_ij=np.zeros([n,J],dtype=object)
+
+  for i in range(n):
+    for j in range(J):
+      Sx=float(S1(Dx[i],D[i,1]))
+      Sy=float(S1(Dy[i],D[i,2]))
+      S=[Sx,Sy]
+      theta_ij[i,j]=np.array(S).reshape(-1, 1)
+
+  answer=np.empty(J)
+
+  for j in range(J):
+    sum=0
+    X=region_solve(D,j,u_cap,sigma1,sigma2,gamma1,gamma2,pi1,pi2,upp,l,theta_ij,H1x,H1y,H2x,H2y,H3x,H3y,H4x,H4y,jx,jy)[0]
+    Y=X=region_solve(D,j,u_cap,sigma1,sigma2,gamma1,gamma2,pi1,pi2,upp,l,theta_ij,H1x,H1y,H2x,H2y,H3x,H3y,H4x,H4y,jx,jy)[1]
+
+    for i in range(n):
+      vec=np.array([X-D[i,1,],Y-D[i,2]])
+      sum+=u_cap[i,0]*LA.norm(vec,1)
+
+    answer[j]=sum
+
+
+
+  return np.min(answer),region_solve(D,np.argmin(answer),u_cap,sigma1,sigma2,gamma1,gamma2,pi1,pi2,upp,l,theta_ij,H1x,H1y,H2x,H2y,H3x,H3y,H4x,H4y,jx,jy)
+
