@@ -1,0 +1,78 @@
+#Making Distance Formulae
+import math
+
+#Euclidean
+def eucl_dist(a1,b1,a2,b2):
+  dist=float(math.sqrt((a1-a2)**2 + (b1-b2)**2))
+  return dist
+
+#Rectilinear
+def rect_dist(a1,b1,a2,b2):
+  dist=float(abs(a1-a2) + abs(b1-b2))
+  return dist
+
+
+#Squared Euclidiean
+def sq_eucl_dist(a1,b1,a2,b2):
+  dist=(a1-a2)**2 + (b1-b2)**2
+  return float(dist)
+
+#Generalised Pth-Distance Norm
+def l_p_dist(a1,b1,a2,b2,p):
+  dist=float(math.pow((abs(a1-a2)**p + abs(b1-b2)**p),1/p))
+  return dist
+
+def function(n,w,a,b,x,y):
+  sumx1=0
+  sumx2=0
+  sumy1=0
+  sumy2=0
+
+  for i in range(n):
+    sumx1=sumx1+w[i]/eucl_dist(x,y,a[i],b[i])
+    sumx2=sumx2+(a[i]*w[i])/eucl_dist(x,y,a[i],b[i])
+    sumy1=sumy1+w[i]/eucl_dist(x,y,a[i],b[i])
+    sumy2=sumy2+(b[i]*w[i])/eucl_dist(x,y,a[i],b[i])   
+
+  newx=sumx2/sumx1
+  newy=sumy2/sumy1
+
+  return newx,newy
+
+#Cluster 2
+
+n=2
+w=[5,4]
+a=[0,5]
+b=[3,3]
+
+x=sum(a)/len(a)
+y=-1000000
+X=[]
+Y=[]
+
+for i in range(30):
+  X.append(function(n,w,a,b,x,y)[0])
+  Y.append(function(n,w,a,b,x,y)[1])
+  x=X[i]
+  y=Y[i]  
+
+
+import matplotlib.pyplot as plt
+  
+plt.plot(Y)
+  
+  
+# naming the x axis
+plt.xlabel('Iterations')
+# naming the y axis
+plt.ylabel('Y-Coordinate')
+# giving a title to my graph
+plt.title('Weiszfeld Process')
+  
+# show a legend on the plot
+plt.legend()
+  
+# function to show the plot
+plt.show()
+    
