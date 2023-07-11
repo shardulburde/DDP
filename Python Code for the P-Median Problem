@@ -1,0 +1,165 @@
+!pip install pulp
+
+#Making Distance Formulae
+import math
+
+#Euclidean
+def eucl_dist(a1,b1,a2,b2):
+  dist=float(math.sqrt((a1-a2)**2 + (b1-b2)**2))
+  return dist
+
+#Rectilinear
+def rect_dist(a1,b1,a2,b2):
+  dist=float(abs(a1-a2) + abs(b1-b2))
+  return dist
+
+
+#Squared Euclidiean
+def sq_eucl_dist(a1,b1,a2,b2):
+  dist=(a1-a2)**2 + (b1-b2)**2
+  return float(dist)
+
+#Generalised Pth-Distance Norm
+def l_p_dist(a1,b1,a2,b2,p):
+  dist=float(math.pow((abs(a1-a2)**p + abs(b1-b2)**p),1/p))
+  return dist
+
+#User Inputs
+import numpy as np
+
+
+n=5  #No. of customers
+p=2  #No. of warehouses: Fixed according to GMI PS
+index=[]
+
+
+for i in range(n):
+  index.append(i)
+ 
+
+demand=[5,4,4,4,4] 
+loc_x=[0,5,8,8,11]
+loc_y=[3,3,0,6,3]
+
+
+
+from pulp import*
+import numpy as np
+
+def solve():
+  #Making Function 
+  D=np.empty([n,n],dtype=float)
+  for i in range(n):
+    for j in range(n):
+      D[i][j]=eucl_dist(loc_x[i],loc_y[i],loc_x[j],loc_y[j]) #Distance matrix
+
+
+  X=LpVariable.dicts('X_%s_%s',(index,index),cat='Binary',lowBound=0,upBound=1) #Decision variables
+
+
+
+  prob=LpProblem('P-Median',LpMinimize)
+  prob+=sum(sum(D[i][j] * X[i][j]*demand[i] for j in index) for i in index) #Objective function
+  prob+=sum(X[i][i] for i in index) == 2  #p facilities constraint, if fac i is active, it will serve itself as well
+  for i in index:
+    prob+=sum(X[i][j] for j in index) == 1.    #1 location is served by only 1 facility, because no capacity constraints
+  for i in index:
+    for j in index:
+      prob+=X[i][j] <= X[j][j]     #user at i cannot be served by facility j if fac j is not open
+
+
+  prob.writeLP("p-median.lp")
+  #print(prob)
+  prob.solve() 
+  #print("Status:",LpStatus[prob.status]) 
+  #print("Objective: ",value(prob.objective)) 
+
+  i=1
+  x={}
+  y=[]
+
+  for v in prob.variables():
+    x[i]=v.varValue
+    if v.varValue==1:
+      y.append(i)
+    i=i+1
+
+  warehouse=[]
+  cluster1=[]
+  cluster2=[]
+  cluster3=[]
+  cluster4=[]
+
+
+
+  X_ij=np.zeros([n,n],dtype=float)
+
+  for g in range(len(y)):  #to transform dictionary decision variables into 2D numpy array 
+    q,r=divmod(y[g],n)
+    if r==0:       #multiples of n
+      i=q-1
+      j=n-1
+    else:       #non-multiples of n
+      i=q
+      j=r-1
+    X_ij[i][j]=1
+
+  
+
+
+  for i in range(0, n):   #finding columns whose sum>0,  implies there is a facility
+      sumCol = 0;  
+      for j in range(0, n):  
+          sumCol = sumCol + X_ij[j][i];  
+      if sumCol>0:
+        warehouse.append(i+1)   
+
+
+
+  for i in range(0, n):  #finding which user is facility supplying to
+      if X_ij[i][warehouse[0]-1]==1:  
+        cluster1.append(i+1)
+      if X_ij[i][warehouse[1]-1]==1:
+        cluster2.append(i+1)
+      #if X_ij[i][warehouse[2]-1]==1:
+        #cluster3.append(i+1)
+      #if X_ij[i][warehouse[3]-1]==1:
+        #cluster4.append(i+1)
+
+
+
+  # for i in range(0, n):  #finding which user is facility supplying to
+  #     for j in range(0,2):
+  #       if X_ij[i][warehouse[j]-1]==1:
+  #         cluster.append([j,i+1])
+
+
+
+  print("The allocation matrix X_ij comes out to be:") 
+  print("   ")
+  print(X_ij)
+  print("   ")
+  print("Cluster 1:","Warehouse at Locn",warehouse[0],",Users at",cluster1)
+  print("Cluster 2:","Warehouse at Locn",warehouse[1],",Users at",cluster2)
+  # #print("Cluster 3:","Warehouse at Locn",warehouse[2],",Users at",cluster3)
+  # #print("Cluster 4:","Warehouse at Locn",warehouse[3],",Users at",cluster4)
+  # print("   ")
+  # print("The minimum of the objective function turns to be:",float(value(prob.objective)))
+  # import numpy as np
+  %matplotlib inline
+  import matplotlib.pyplot as plt
+  plt.style.use('seaborn-whitegrid')
+
+
+  fac_x=[loc_x[warehouse[0]-1],loc_x[warehouse[1]-1]]
+  fac_y=[loc_y[warehouse[0]-1],loc_y[warehouse[1]-1]]
+
+
+  plt.plot(loc_x, loc_y, 'o', color='blue');
+  plt.plot(fac_x, fac_y, 'p', color='red')
+
+
+
+  return(warehouse[0],cluster1,warehouse[1],cluster2)
+
+solve()
